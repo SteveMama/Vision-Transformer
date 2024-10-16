@@ -13,6 +13,26 @@ from torchvision.datasets.mnist import MNIST
 np.random.seed(0)
 torch.manual_seed(0)
 
+class  ViT(nn.Module):
+    def __init__(self, chw=(1, 28, 28), n_patches = 7):
+        super(ViT, self).__init__()
+
+        self.chw =chw   #channel width height
+        self.n_patches = n_patches
+
+        assert chw[1] % n_patches == 0, "Input shape should be divisible by _patches"
+        assert chw[2] % n_patches == 0, "Input shape should be divisible by _patches"
+
+        self.patch_size = (chw[1]/ n_patches, chw[2] / n_patches)
+
+        self.input_dim = int(chw[0] * self.patch_size[0] * self.patch_size[1])
+        self.linear_mapper = nn.Linear(self.input_dim, self.hidden_d)
+
+    def forward(self, images):
+        patches = patch_embedding(images, self.n_patches)
+        tokens = self.linear_mapper(patches)
+        return tokens
+
 
 
 def patch_embedding(images, n_patches):
