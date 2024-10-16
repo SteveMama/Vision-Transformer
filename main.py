@@ -14,11 +14,14 @@ np.random.seed(0)
 torch.manual_seed(0)
 
 class  ViT(nn.Module):
-    def __init__(self, chw=(1, 28, 28), n_patches = 7):
+    def __init__(self, chw=(1, 28, 28), n_patches = 7,n_heads = 2, n_blocks = 2, hidden_d =2, out_d = 10):
         super(ViT, self).__init__()
 
         self.chw =chw   #channel width height
         self.n_patches = n_patches
+        self.n_blocks = n_blocks
+        self.n_heads = n_heads
+        self.hidden_d = hidden_d
 
         assert chw[1] % n_patches == 0, "Input shape should be divisible by _patches"
         assert chw[2] % n_patches == 0, "Input shape should be divisible by _patches"
@@ -34,6 +37,19 @@ class  ViT(nn.Module):
         self.pos_embed = nn.Parameter(torch.tensor(self.n_patches **2 + 1, self.hidden_d))
         self.pos_embed.requires_grad= False
 
+
+        self.blocks = nn.ModuleList(
+            [
+                EncoderVIT(self.hidden_d, self.n_heads) for _ in range(n_blocks)
+            ]
+        )
+
+        # Classification MLP
+        self.mlp  = nn.Sequential(
+            nn.Linear(self.hidden_d, out_d),
+            nn.Softmax(dim=-1)
+        )
+
     def forward(self, images):
         n, c, h, w = images
         patches = patch_embedding(images, self.n_patches)
@@ -43,7 +59,16 @@ class  ViT(nn.Module):
 
         pos_embed = self.pos_embed.repeat(n, 1, 1)
         out = tokens + pos_embed
-        return tokens
+
+        #Transformer block
+        for block in self.blocks:
+            out = block(out)
+
+        #Classification Token
+        out = out[:, 0]
+
+
+        return self.mlp(out)
 
 
 
@@ -73,7 +98,7 @@ def positional_embedding(sequence_length, d):
 
     for i in range(sequence_length):
         for j in range(d):
-            result[i][j] = np.sin(i / (10000 ** (j / d))) if j % 2 ===0 else np.cos(i / (10000 ** (j -1)/d))
+             result[i][j] = np.sin(i / (10000 ** (j / d))) if j % 2 ==0 else np.cos(i / (10000 ** (j -1)/d))
 
     return result
 
