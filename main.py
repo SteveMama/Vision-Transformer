@@ -34,7 +34,8 @@ class  ViT(nn.Module):
         self.class_token = nn.Parameter(torch.rand(1, self.hidden_d))
 
         #Positional Embedding
-        self.pos_embed = nn.Parameter(torch.tensor(self.n_patches **2 + 1, self.hidden_d))
+        self.pos_embed = nn.Parameter(torch.rand(self.n_patches ** 2 + 1, self.hidden_d))
+
         self.pos_embed.requires_grad= False
 
 
@@ -51,11 +52,11 @@ class  ViT(nn.Module):
         )
 
     def forward(self, images):
-        n, c, h, w = images
+        n, c, h, w = images.shape
         patches = patch_embedding(images, self.n_patches)
         tokens = self.linear_mapper(patches)
 
-        tokens = torch.stack([torch.vstack(self.class_token, tokens[i])] for i in range(len(tokens)))
+        tokens = torch.cat([self.class_token.unsqueeze(0).repeat(n, 1, 1), tokens], dim=1)
 
         pos_embed = self.pos_embed.repeat(n, 1, 1)
         out = tokens + pos_embed
@@ -74,19 +75,36 @@ class  ViT(nn.Module):
 
 
 
+# def patch_embedding(images, n_patches):
+#
+#     n, c, h, w = images.shape # n, 1, 28, 28
+#     assert h == w, "Patch Embedding requires the h and w to be same"
+#
+#     patches = torch.zeros(n, n_patches ** 2, h * w * c // n_patches ** 2)
+#     patch_size = h // n_patches
+#
+#     for idx, image in enumerate(images):
+#         for i in range(n_patches):
+#             for j in range(n_patches):
+#                 patch = images[:, i * patch_size: (i + 1) * patch_size, j *patch_size: (j + 1)* patch_size]
+#                 # image 2D patch 0 -------> 4
+#                 patches[idx, i * n_patches + j] = patch.flatten()
+#
+#     return patches
 def patch_embedding(images, n_patches):
+    n, c, h, w = images.shape  # n = batch size, c = channels, h = height, w = width
+    assert h == w, "Patch Embedding requires the height and width to be the same"
 
-    n, c, h, w = images.shape # n, 1, 28, 28
-    assert h == w, "Patch Embedding requires the h and w to be same"
+    patch_size = h // n_patches  # Size of each patch
 
-    patches = torch.zeros(n, n_patches ** 2, h * w * c // n_patches ** 2)
-    patch_size = h // n_patches
+
+    flattened_patch_size = patch_size * patch_size * c
+    patches = torch.zeros(n, n_patches ** 2, flattened_patch_size).to(images.device)
 
     for idx, image in enumerate(images):
         for i in range(n_patches):
             for j in range(n_patches):
-                patch = images[:, i * patch_size: (i + 1) * patch_size, j *patch_size: (j + 1)* patch_size]
-                # image 2D patch 0 -------> 4
+                patch = image[:, i * patch_size: (i + 1) * patch_size, j * patch_size: (j + 1) * patch_size]
                 patches[idx, i * n_patches + j] = patch.flatten()
 
     return patches
@@ -104,7 +122,7 @@ def positional_embedding(sequence_length, d):
 
 
 class MultiHeadAttention(nn.Module):
-    
+
     def __init__(self, d, n_heads):
         super(MultiHeadAttention, self).__init__()
 
@@ -115,9 +133,9 @@ class MultiHeadAttention(nn.Module):
 
         #patch --> q, k, v w.r.t attn , but not apply across n_heads
         d_head = int(d / n_heads)
-        self.q = nn.ModuleList([nn.linear(d_head, d_head) for _ in range(self.n_heads)])
-        self.k = nn.ModuleList([nn.linear(d_head, d_head) for _ in range(self.n_heads)])
-        self.v = nn.ModuleList([nn.linear(d_head, d_head) for _ in range(self.n_heads)])
+        self.q = nn.ModuleList([nn.Linear(d_head, d_head) for _ in range(self.n_heads)])
+        self.k = nn.ModuleList([nn.Linear(d_head, d_head) for _ in range(self.n_heads)])
+        self.v = nn.ModuleList([nn.Linear(d_head, d_head) for _ in range(self.n_heads)])
         self.d_head =  d_head
         self.softmax = nn.Softmax(dim=-1)
 
@@ -131,14 +149,18 @@ class MultiHeadAttention(nn.Module):
             for head in range(self.n_heads):
                 q_mapping = self.q[head]
                 k_mapping = self.k[head]
-                v_mapping = self.k[head]
+                v_mapping = self.v[head]
 
-                seq = sequence[: head * self.d_head: (head+1) * self.d_head]
+                seq = sequence[:, head * self.d_head:(head + 1) * self.d_head]
+                if seq.size(0) == 0:
+                    raise ValueError("Sequence size is zero. Check your input dimensions.")
+
                 q, k, v = q_mapping(seq), k_mapping(seq), v_mapping(seq)
 
                 attention = self.softmax(q @ k.T / (self.d_head ** 0.5)) # @ is dot product
                 seq_result.append(attention @ v)
-            result.append(torch.hstack(seq_result))
+            result.append(torch.cat(seq_result, dim=-1))
+
 
 
         return torch.cat([torch.unsqueeze(r, dim=0) for r in result])
@@ -156,7 +178,7 @@ class EncoderVIT(nn.Module):
         self.norm2 = nn.LayerNorm(hidden_d)
         self.mlp = nn.Sequential(
             nn.Linear(hidden_d, mlp_ratio * hidden_d),
-            nn.GeLU(),
+            nn.GELU(),
             nn.Linear(mlp_ratio * hidden_d,hidden_d)
         )
 

@@ -38,7 +38,7 @@ def main():
 
     for epoch in trange(N_EPOCHS, desc="training"):
         train_loss = 0.0
-        for batch in tqdm(train_loader, desc=f"Epoch {epoch +1} is trianing"):
+        for batch in tqdm(train_loader, desc=f"Epoch {epoch +1} is training"):
             x, y = batch
             x, y = x.to(device), y.to(device)
             y_hat = model(x)
@@ -53,7 +53,7 @@ def main():
         print(f"Epoch {epoch + 1} / {N_EPOCHS} loss: {train_loss: .2f}")
 
     # Testing
-    with torch.no_grad:
+    with torch.no_grad():
         correct, total = 0, 0
         test_loss = 0.0
         for batch in tqdm(test_loader, desc='Testing'):
@@ -61,9 +61,13 @@ def main():
             x, y = x.to(device) , y.to(device)
             y_hat = model(x)
             loss = criterion(y_hat, y)
-            test += loss.detach().cpu.item() / len(test_loader)
+            test_loss += loss.detach().cpu.item() / len(test_loader)
 
             correct += torch.sum(torch.argmax(y_hat, dim=1)==y).detach().cpu().item()
             total += len(x)
 
         print(f"Test Loss: {test_loss: .2f}")
+
+
+if __name__ == "__main__":
+    main()
