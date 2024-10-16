@@ -115,5 +115,28 @@ class MultiHeadAttention(nn.Module):
                 seq_result.append(attention @ v)
             result.append(torch.hstack(seq_result))
 
+
         return torch.cat([torch.unsqueeze(r, dim=0) for r in result])
+
+
+class EncoderVIT(nn.Module):
+
+    def __init__(self, hidden_d, n_heads, mlp_ratio = 4):
+        super(EncoderVIT, self).__init__()
+        self.hidden_d = hidden_d
+        self.n_heads =  n_heads
+
+        self.norm1 = nn.LayerNorm(hidden_d)
+        self.mhsa = MultiHeadAttention(hidden_d, n_heads)
+        self.norm2 = nn.LayerNorm(hidden_d)
+        self.mlp = nn.Sequential(
+            nn.Linear(hidden_d, mlp_ratio * hidden_d),
+            nn.GeLU(),
+            nn.Linear(mlp_ratio * hidden_d,hidden_d)
+        )
+
+    def forward(self, x):
+        out = x + self.mhsa(self.norm1(x))
+        out = out + self.mlp(self.norm2(out))
+        return out
 
