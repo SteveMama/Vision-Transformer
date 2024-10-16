@@ -28,9 +28,21 @@ class  ViT(nn.Module):
         self.input_dim = int(chw[0] * self.patch_size[0] * self.patch_size[1])
         self.linear_mapper = nn.Linear(self.input_dim, self.hidden_d)
 
+        self.class_token = nn.Parameter(torch.rand(1, self.hidden_d))
+
+        #Positional Embedding
+        self.pos_embed = nn.Parameter(torch.tensor(self.n_patches **2 + 1, self.hidden_d))
+        self.pos_embed.requires_grad= False
+
     def forward(self, images):
+        n, c, h, w = images
         patches = patch_embedding(images, self.n_patches)
         tokens = self.linear_mapper(patches)
+
+        tokens = torch.stack([torch.vstack(self.class_token, tokens[i])] for i in range(len(tokens)))
+
+        pos_embed = self.pos_embed.repeat(n, 1, 1)
+        out = tokens + pos_embed
         return tokens
 
 
@@ -51,4 +63,16 @@ def patch_embedding(images, n_patches):
                 patches[idx, i * n_patches + j] = patch.flatten()
 
     return patches
+
+
+def positional_embedding(sequence_length, d):
+
+    result = torch.ones(sequence_length, d)
+
+    for i in range(sequence_length):
+        for j in range(d):
+            result[i][j] = np.sin(i / (10000 ** (j / d))) if j % 2 ===0 else np.cos(i / (10000 ** (j -1)/d))
+
+    return result
+
 
